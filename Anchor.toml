@@ -1,5 +1,5 @@
 [programs.localnet]
-anchor_shared_vault = "Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS"
+anchor_shared_vault = "3eC59jD55nX6HvYj6tE7ycbmj8ctBiGuCjLBvK6oFNz9"
 
 [registry]
 url = "https://anchor.projectserum.com"
