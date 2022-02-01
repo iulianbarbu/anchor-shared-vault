@@ -16,7 +16,10 @@ pub mod anchor_shared_vault {
         initializer_amount: u64
     ) -> ProgramResult {
         ctx.accounts.shared_vault_account.initializer_key = *ctx.accounts.initializer.key;
-        ctx.accounts.shared_vault_account.amount = initializer_amount;
+        ctx.accounts.shared_vault_account.balance = initializer_amount;
+        ctx.accounts.initializer_state.deposited = initializer_amount;
+        ctx.accounts.initializer_state.debt = 0;
+        ctx.accounts.initializer_state.is_whitelisted = true;
 
         let (shared_vault_token_account_authority, _shared_vault_token_account_authority_bump) =
             Pubkey::find_program_address(&[SHARED_VAULT_PDA_SEED], ctx.program_id);
@@ -29,7 +32,7 @@ pub mod anchor_shared_vault {
 
         token::transfer(
             ctx.accounts.into_transfer_to_pda_context(),
-            ctx.accounts.shared_vault_account.amount,
+            ctx.accounts.shared_vault_account.balance,
         )?;
         
         Ok(())
@@ -39,7 +42,18 @@ pub mod anchor_shared_vault {
         ctx: Context<Deposit>,
         amount: u64
     ) -> ProgramResult {
-        ctx.accounts.shared_vault_account.amount += amount;
+        ctx.accounts.shared_vault_account.balance += amount;
+        if ctx.accounts.user_state.debt == 0 {
+            ctx.accounts.user_state.deposited += amount;
+        } else {
+            ctx.accounts.user_state.debt = if ctx.accounts.user_state.debt <= amount {
+                ctx.accounts.user_state.deposited = amount - ctx.accounts.user_state.debt;
+                0
+            } else {
+                ctx.accounts.user_state.debt + amount
+            }
+        }
+
         token::transfer(
             ctx.accounts.into_transfer_to_pda_context(),
             amount
@@ -55,8 +69,22 @@ pub mod anchor_shared_vault {
         let (_vault_authority, vault_authority_bump) =
         Pubkey::find_program_address(&[SHARED_VAULT_PDA_SEED], ctx.program_id);
         let authority_seeds = &[&SHARED_VAULT_PDA_SEED[..], &[vault_authority_bump]];
+        if ctx.accounts.shared_vault_account.balance < amount {
+            return Err(ProgramError::InsufficientFunds);
+        }
 
-        ctx.accounts.shared_vault_account.amount -= amount;
+        if !ctx.accounts.user_state.is_whitelisted && ctx.accounts.user_state.deposited < amount {
+            return Err(ProgramError::Custom(0x99));
+        }
+        
+        ctx.accounts.shared_vault_account.balance -= amount;
+        ctx.accounts.user_state.deposited = if ctx.accounts.user_state.deposited >= amount {
+            ctx.accounts.user_state.deposited - amount
+        } else {
+            ctx.accounts.user_state.debt -= amount - ctx.accounts.user_state.deposited;
+            0
+        };
+        
         token::transfer(
             ctx.accounts
                 .into_transfer_to_user_token_account()
@@ -66,12 +94,34 @@ pub mod anchor_shared_vault {
 
         Ok(())
     }
+
+    pub fn whitelist(
+        ctx: Context<Whitelist>
+    ) -> ProgramResult {
+        ctx.accounts.user_state.is_whitelisted = true;
+        Ok(())
+    }
+
+    pub fn blacklist(
+        ctx: Context<Blacklist>
+    ) -> ProgramResult {
+        ctx.accounts.user_state.is_whitelisted = false;
+        Ok(())
+    }
 }
 
 #[account]
 pub struct SharedVaultAccount {
     pub initializer_key: Pubkey,
-    pub amount: u64,
+    pub balance: u64
+}
+
+#[account]
+#[derive(Default)]
+pub struct UserState {
+    pub deposited: u64,
+    pub debt: u64,
+    pub is_whitelisted: bool,
 }
 
 #[derive(Accounts)]
@@ -80,6 +130,8 @@ pub struct Initialize<'info> {
     #[account(mut, signer)]
     pub initializer: AccountInfo<'info>,
     pub mint: Account<'info, Mint>,
+    #[account(init, payer = initializer)]
+    pub initializer_state: Account<'info, UserState>,
     #[account(
         init,
         seeds = [b"token-seed".as_ref()],
@@ -128,6 +180,8 @@ impl<'info> Initialize<'info> {
 pub struct Deposit<'info> {
     #[account(mut, signer)]
     pub user: AccountInfo<'info>,
+    #[account(init_if_needed, payer = user)]
+    pub user_state: Account<'info, UserState>,
     pub mint: Account<'info, Mint>,
     #[account(mut)]
     pub shared_vault_token_account: Account<'info, TokenAccount>,
@@ -162,6 +216,8 @@ impl<'info> Deposit<'info> {
 pub struct Withdraw<'info> {
     #[account(mut, signer)]
     pub user: AccountInfo<'info>,
+    #[account(init_if_needed, payer = user)]
+    pub user_state: Account<'info, UserState>,
     pub mint: Account<'info, Mint>,
     #[account(mut)]
     pub shared_vault_token_account: Account<'info, TokenAccount>,
@@ -169,7 +225,7 @@ pub struct Withdraw<'info> {
     pub user_token_account: Account<'info, TokenAccount>,
     #[account(
         mut,
-        constraint = shared_vault_account.amount >= amount
+        constraint = shared_vault_account.balance >= amount
     )]
     pub shared_vault_account: Account<'info, SharedVaultAccount>,
     pub shared_vault_token_account_authority: AccountInfo<'info>,
@@ -190,4 +246,28 @@ impl<'info> Withdraw<'info> {
         };
         CpiContext::new(self.token_program.clone(), cpi_accounts)
     }
+}
+
+#[derive(Accounts)]
+pub struct Whitelist<'info> {
+    #[account(mut, signer)]
+    pub user: AccountInfo<'info>,
+    #[account(init_if_needed, payer = user)]
+    pub user_state: Account<'info, UserState>,
+    pub mint: Account<'info, Mint>,
+    pub system_program: AccountInfo<'info>,
+    pub rent: Sysvar<'info, Rent>,
+    pub token_program: AccountInfo<'info>,
+}
+
+#[derive(Accounts)]
+pub struct Blacklist<'info> {
+    #[account(mut, signer)]
+    pub user: AccountInfo<'info>,
+    #[account(init_if_needed, payer = user)]
+    pub user_state: Account<'info, UserState>,
+    pub mint: Account<'info, Mint>,
+    pub system_program: AccountInfo<'info>,
+    pub rent: Sysvar<'info, Rent>,
+    pub token_program: AccountInfo<'info>,
 }

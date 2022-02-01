@@ -3,7 +3,7 @@ import { Program } from '@project-serum/anchor';
 import { AnchorSharedVault } from '../target/types/anchor_shared_vault';
 import { PublicKey, SystemProgram, Transaction } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID, Token } from "@solana/spl-token";
-import { assert } from "chai";
+import { should, expect, assert } from "chai";
 
 describe('anchor-shared-vault', () => {
   // Configure the client to use the local cluster.
@@ -16,7 +16,9 @@ describe('anchor-shared-vault', () => {
   const depositAmount = 200;
   const withdrawAmount = 100;
   const sharedVaultAccount = anchor.web3.Keypair.generate();
+  const initializerStateAccount = anchor.web3.Keypair.generate();
   const initializerMainAccount = anchor.web3.Keypair.generate();
+  const depositerStateAccount = anchor.web3.Keypair.generate();
   const depositerMainAccount = anchor.web3.Keypair.generate();
 
   const payer = anchor.web3.Keypair.generate();
@@ -111,6 +113,7 @@ describe('anchor-shared-vault', () => {
       {
         accounts: {
           initializer: initializerMainAccount.publicKey,
+          initializerState: initializerStateAccount.publicKey,
           sharedVaultTokenAccount: sharedVaultTokenAccountPDA,
           mint: mint.publicKey,
           initializerTokenAccount: initializerTokenAccount,
@@ -122,7 +125,7 @@ describe('anchor-shared-vault', () => {
         instructions: [
           await program.account.sharedVaultAccount.createInstruction(sharedVaultAccount),
         ],
-        signers: [sharedVaultAccount, initializerMainAccount],
+        signers: [initializerMainAccount, initializerStateAccount, sharedVaultAccount],
       }
     );
     
@@ -132,12 +135,9 @@ describe('anchor-shared-vault', () => {
       sharedVaultAccount.publicKey
     );
 
-    // Check that the new owner is the PDA.
     assert.ok(_vault.owner.equals(sharedVaultTokenAccountAuthorityPDA));
-
-    // Check that the values in the escrow account match what we expect.
     assert.ok(_sharedVaultAccount.initializerKey.equals(initializerMainAccount.publicKey));
-    assert.ok(_sharedVaultAccount.amount.toNumber() == initializerAmount);
+    assert.ok(_sharedVaultAccount.balance.toNumber() == initializerAmount);
   });
 
   it("Deposit money", async () => {
@@ -146,6 +146,7 @@ describe('anchor-shared-vault', () => {
       {
         accounts: {
           user: depositerMainAccount.publicKey,
+          userState: depositerStateAccount.publicKey,
           sharedVaultTokenAccount: sharedVaultTokenAccountPDA,
           mint: mint.publicKey,
           userTokenAccount: depositerTokenAccount,
@@ -154,22 +155,15 @@ describe('anchor-shared-vault', () => {
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
           tokenProgram: TOKEN_PROGRAM_ID,
         },
-        signers: [depositerMainAccount],
+        signers: [depositerMainAccount, depositerStateAccount],
       }
     );
     
-    let _vault = await mint.getAccountInfo(sharedVaultTokenAccountPDA);
-
     let _sharedVaultAccount = await program.account.sharedVaultAccount.fetch(
       sharedVaultAccount.publicKey
     );
 
-    // Check that the new owner is the PDA.
-    assert.ok(_vault.owner.equals(sharedVaultTokenAccountAuthorityPDA));
-
-    // Check that the values in the escrow account match what we expect.
-    assert.ok(_sharedVaultAccount.initializerKey.equals(initializerMainAccount.publicKey));
-    assert.ok(_sharedVaultAccount.amount.toNumber() == initializerAmount + depositAmount);
+    assert.ok(_sharedVaultAccount.balance.toNumber() == initializerAmount + depositAmount);
   });
 
   it("Withdraw money", async () => {
@@ -178,6 +172,7 @@ describe('anchor-shared-vault', () => {
       {
         accounts: {
           user: depositerMainAccount.publicKey,
+          userState: depositerStateAccount.publicKey,
           sharedVaultTokenAccount: sharedVaultTokenAccountPDA,
           mint: mint.publicKey,
           userTokenAccount: depositerTokenAccount,
@@ -187,21 +182,67 @@ describe('anchor-shared-vault', () => {
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
           tokenProgram: TOKEN_PROGRAM_ID,
         },
-        signers: [depositerMainAccount],
+        signers: [depositerMainAccount, depositerStateAccount],
       }
     );
     
-    let _vault = await mint.getAccountInfo(sharedVaultTokenAccountPDA);
+    let _sharedVaultAccount = await program.account.sharedVaultAccount.fetch(
+      sharedVaultAccount.publicKey
+    );
+    assert.ok(initializerAmount + depositAmount - withdrawAmount  ==_sharedVaultAccount.balance.toNumber());
+  });
 
+  it("Non-whitelisted withdraw money", async () => {
+    try {
+      await program.rpc.withdraw(
+        new anchor.BN(depositAmount),
+        {
+          accounts: {
+            user: depositerMainAccount.publicKey,
+            userState: depositerStateAccount.publicKey,
+            sharedVaultTokenAccount: sharedVaultTokenAccountPDA,
+            mint: mint.publicKey,
+            userTokenAccount: depositerTokenAccount,
+            sharedVaultAccount: sharedVaultAccount.publicKey,
+            sharedVaultTokenAccountAuthority: sharedVaultTokenAccountAuthorityPDA,
+            systemProgram: anchor.web3.SystemProgram.programId,
+            rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+            tokenProgram: TOKEN_PROGRAM_ID,
+          },
+          signers: [depositerMainAccount, depositerStateAccount],
+        }
+      );
+    } catch(err) {
+      console.log(err.toString());
+      assert.ok(err.toString() == "Error: failed to send transaction: Transaction simulation failed: Error processing Instruction 0: custom program error: 0x99")
+    }  
+  });
+
+  it("Whitelisted withdraw money", async () => {
+    await program.rpc.withdraw(
+      new anchor.BN(initializerAmount + 1),
+      {
+        accounts: {
+          user: initializerMainAccount.publicKey,
+          userState: initializerStateAccount.publicKey,
+          sharedVaultTokenAccount: sharedVaultTokenAccountPDA,
+          mint: mint.publicKey,
+          userTokenAccount: initializerTokenAccount,
+          sharedVaultAccount: sharedVaultAccount.publicKey,
+          sharedVaultTokenAccountAuthority: sharedVaultTokenAccountAuthorityPDA,
+          systemProgram: anchor.web3.SystemProgram.programId,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        },
+        signers: [initializerMainAccount, initializerStateAccount],
+      }
+    );
+    
     let _sharedVaultAccount = await program.account.sharedVaultAccount.fetch(
       sharedVaultAccount.publicKey
     );
 
-    // Check that the new owner is the PDA.
-    assert.ok(_vault.owner.equals(sharedVaultTokenAccountAuthorityPDA));
-
-    // Check that the values in the escrow account match what we expect.
-    assert.ok(_sharedVaultAccount.initializerKey.equals(initializerMainAccount.publicKey));
-    assert.ok(initializerAmount + depositAmount - withdrawAmount  ==_sharedVaultAccount.amount.toNumber());
+    assert.ok(depositAmount - withdrawAmount - 1  ==_sharedVaultAccount.balance.toNumber());
   });
+
 });
