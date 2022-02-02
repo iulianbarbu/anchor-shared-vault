@@ -1,6 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, SetAuthority, TokenAccount, Transfer};
 use spl_token::instruction::AuthorityType;
+use thiserror::Error;
 
 declare_id!("3eC59jD55nX6HvYj6tE7ycbmj8ctBiGuCjLBvK6oFNz9");
 
@@ -80,7 +81,7 @@ pub mod anchor_shared_vault {
         ctx.accounts.user_state.deposited = if ctx.accounts.user_state.deposited >= amount {
             ctx.accounts.user_state.deposited - amount
         } else {
-            ctx.accounts.user_state.debt -= amount - ctx.accounts.user_state.deposited;
+            ctx.accounts.user_state.debt += amount - ctx.accounts.user_state.deposited;
             0
         };
         
@@ -119,7 +120,7 @@ pub struct SharedVaultAccount {
 pub struct UserState {
     pub deposited: u64,
     pub debt: u64,
-    pub is_whitelisted: bool,
+    pub is_whitelisted: bool
 }
 
 #[derive(Accounts)]
@@ -265,8 +266,6 @@ pub struct Blacklist<'info> {
     pub system_program: AccountInfo<'info>,
     pub rent: Sysvar<'info, Rent>,
 }
-
-use thiserror::Error;
 
 #[derive(Error, Debug, Copy, Clone)]
 pub enum SharedVaultError {

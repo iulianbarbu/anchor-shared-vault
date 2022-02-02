@@ -73,7 +73,7 @@ describe('anchor-shared-vault', () => {
       initializerTokenAccount,
       mintAuthority.publicKey,
       [mintAuthority],
-      initializerAmount
+      initializerAmount * 3
     );
 
     depositerTokenAccount = await mint.createAccount(depositerMainAccount.publicKey);
@@ -100,7 +100,7 @@ describe('anchor-shared-vault', () => {
     sharedVaultTokenAccountAuthorityPDA = _sharedVaultTokenAccountAuthorityPDA;
 
     let _initializerTokenAccount = await mint.getAccountInfo(initializerTokenAccount);
-    assert.ok(_initializerTokenAccount.amount.toNumber() == initializerAmount);
+    assert.ok(_initializerTokenAccount.amount.toNumber() == initializerAmount * 3);
 
     let _depositerTokenAccount = await mint.getAccountInfo(depositerTokenAccount);
     assert.ok(_depositerTokenAccount.amount.toNumber() == depositAmount * 2);
@@ -161,8 +161,13 @@ describe('anchor-shared-vault', () => {
     let _sharedVaultAccount = await program.account.sharedVaultAccount.fetch(
       sharedVaultAccount.publicKey
     );
+    let _depositerUserState = await program.account.userState.fetch(
+      depositerStateAccount.publicKey
+    );
 
     assert.ok(_sharedVaultAccount.balance.toNumber() == initializerAmount + depositAmount);
+    assert.ok(_depositerUserState.deposited.toNumber() == depositAmount);
+    assert.ok(_depositerUserState.debt.toNumber() == 0);
   });
 
   it("Withdraw money", async () => {
@@ -188,6 +193,12 @@ describe('anchor-shared-vault', () => {
     let _sharedVaultAccount = await program.account.sharedVaultAccount.fetch(
       sharedVaultAccount.publicKey
     );
+    let _depositerUserState = await program.account.userState.fetch(
+      depositerStateAccount.publicKey
+    );
+
+    assert.ok(_depositerUserState.deposited.toNumber() == depositAmount - withdrawAmount);
+    assert.ok(_depositerUserState.debt.toNumber() == 0);
     assert.ok(initializerAmount + depositAmount - withdrawAmount  ==_sharedVaultAccount.balance.toNumber());
   });
 
@@ -212,9 +223,16 @@ describe('anchor-shared-vault', () => {
         }
       );
     } catch(err) {
-      console.log(err.toString());
-      console.log("");
-      assert.ok(err.toString() == "Error: failed to send transaction: Transaction simulation failed: Error processing Instruction 0: custom program error: 0x1")
+      assert.ok(err.toString() == "Error: failed to send transaction: Transaction simulation failed: Error processing Instruction 0: custom program error: 0x1");
+      let _depositerUserState = await program.account.userState.fetch(
+        depositerStateAccount.publicKey
+      );
+      let _sharedVaultAccount = await program.account.sharedVaultAccount.fetch(
+        sharedVaultAccount.publicKey
+      );
+      assert.ok(initializerAmount + depositAmount - withdrawAmount  ==_sharedVaultAccount.balance.toNumber());
+      assert.ok(_depositerUserState.deposited.toNumber() == depositAmount - withdrawAmount);
+      assert.ok(_depositerUserState.debt.toNumber() == 0);
     }  
   });
 
@@ -241,8 +259,42 @@ describe('anchor-shared-vault', () => {
     let _sharedVaultAccount = await program.account.sharedVaultAccount.fetch(
       sharedVaultAccount.publicKey
     );
-
+    let _initializerStateAccount = await program.account.userState.fetch(
+      initializerStateAccount.publicKey
+    );
     assert.ok(depositAmount - withdrawAmount - 1  ==_sharedVaultAccount.balance.toNumber());
+    assert.ok(_initializerStateAccount.debt.toNumber() == 1);
+    assert.ok(_initializerStateAccount.deposited.toNumber() == 0);
+  });
+
+  it("Whitelisted resolve debt", async () => {
+    await program.rpc.deposit(
+      new anchor.BN(initializerAmount + 1),
+      {
+        accounts: {
+          user: initializerMainAccount.publicKey,
+          userState: initializerStateAccount.publicKey,
+          sharedVaultTokenAccount: sharedVaultTokenAccountPDA,
+          mint: mint.publicKey,
+          userTokenAccount: initializerTokenAccount,
+          sharedVaultAccount: sharedVaultAccount.publicKey,
+          systemProgram: anchor.web3.SystemProgram.programId,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        },
+        signers: [initializerMainAccount, initializerStateAccount],
+      }
+    );
+    
+    let _sharedVaultAccount = await program.account.sharedVaultAccount.fetch(
+      sharedVaultAccount.publicKey
+    );
+    assert.ok(initializerAmount + depositAmount - withdrawAmount  == _sharedVaultAccount.balance.toNumber());
+    let _initializerUserState = await program.account.userState.fetch(
+      initializerStateAccount.publicKey
+    );
+    assert.ok(_initializerUserState.debt.toNumber() == 0);
+    assert.ok(_initializerUserState.deposited.toNumber() == initializerAmount);
   });
 
   it("Check whitelist/blacklist", async () => {
