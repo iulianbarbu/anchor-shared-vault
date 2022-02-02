@@ -15,7 +15,6 @@ pub mod anchor_shared_vault {
         _vault_account_bump: u8,
         initializer_amount: u64
     ) -> ProgramResult {
-        ctx.accounts.shared_vault_account.initializer_key = *ctx.accounts.initializer.key;
         ctx.accounts.shared_vault_account.balance = initializer_amount;
         ctx.accounts.initializer_state.deposited = initializer_amount;
         ctx.accounts.initializer_state.debt = 0;
@@ -55,7 +54,7 @@ pub mod anchor_shared_vault {
         }
 
         token::transfer(
-            ctx.accounts.into_transfer_to_pda_context(),
+            ctx.accounts.into_transfer_to_shared_vault(),
             amount
         )?;
 
@@ -70,11 +69,11 @@ pub mod anchor_shared_vault {
         Pubkey::find_program_address(&[SHARED_VAULT_PDA_SEED], ctx.program_id);
         let authority_seeds = &[&SHARED_VAULT_PDA_SEED[..], &[vault_authority_bump]];
         if ctx.accounts.shared_vault_account.balance < amount {
-            return Err(ProgramError::InsufficientFunds);
+            return Err(SharedVaultError::InsufficientFunds.into());
         }
 
         if !ctx.accounts.user_state.is_whitelisted && ctx.accounts.user_state.deposited < amount {
-            return Err(ProgramError::Custom(0x99));
+            return Err(SharedVaultError::CanNotBorrow.into());
         }
         
         ctx.accounts.shared_vault_account.balance -= amount;
@@ -112,7 +111,6 @@ pub mod anchor_shared_vault {
 
 #[account]
 pub struct SharedVaultAccount {
-    pub initializer_key: Pubkey,
     pub balance: u64
 }
 
@@ -198,7 +196,7 @@ pub struct Deposit<'info> {
 }
 
 impl<'info> Deposit<'info> {
-    fn into_transfer_to_pda_context(&self) -> CpiContext<'_, '_, '_, 'info, Transfer<'info>> {
+    fn into_transfer_to_shared_vault(&self) -> CpiContext<'_, '_, '_, 'info, Transfer<'info>> {
         let cpi_accounts = Transfer {
             from: self
                 .user_token_account
@@ -254,10 +252,8 @@ pub struct Whitelist<'info> {
     pub user: AccountInfo<'info>,
     #[account(init_if_needed, payer = user)]
     pub user_state: Account<'info, UserState>,
-    pub mint: Account<'info, Mint>,
     pub system_program: AccountInfo<'info>,
     pub rent: Sysvar<'info, Rent>,
-    pub token_program: AccountInfo<'info>,
 }
 
 #[derive(Accounts)]
@@ -266,8 +262,23 @@ pub struct Blacklist<'info> {
     pub user: AccountInfo<'info>,
     #[account(init_if_needed, payer = user)]
     pub user_state: Account<'info, UserState>,
-    pub mint: Account<'info, Mint>,
     pub system_program: AccountInfo<'info>,
     pub rent: Sysvar<'info, Rent>,
-    pub token_program: AccountInfo<'info>,
+}
+
+use thiserror::Error;
+
+#[derive(Error, Debug, Copy, Clone)]
+pub enum SharedVaultError {
+    /// Invalid instruction
+    #[error("Insufficient Fund ")]
+    InsufficientFunds,
+    #[error("Can Not Borrow")]
+    CanNotBorrow,
+}
+
+impl From<SharedVaultError> for ProgramError {
+    fn from(e: SharedVaultError) -> Self {
+        ProgramError::Custom(e as u32)
+    }
 }

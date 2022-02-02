@@ -84,14 +84,6 @@ describe('anchor-shared-vault', () => {
       depositAmount * 2
     );
 
-    let _initializerTokenAccount = await mint.getAccountInfo(initializerTokenAccount);
-    assert.ok(_initializerTokenAccount.amount.toNumber() == initializerAmount);
-
-    let _depositerTokenAccount = await mint.getAccountInfo(depositerTokenAccount);
-    assert.ok(_depositerTokenAccount.amount.toNumber() == depositAmount * 2);
-  });
-
-  it("Initialize shared vault", async () => {
     const [_sharedVaultTokenAccountPDA, _sharedVaultTokenAccountBump] = await PublicKey.findProgramAddress(
       [Buffer.from(anchor.utils.bytes.utf8.encode("token-seed"))],
       program.programId
@@ -107,6 +99,14 @@ describe('anchor-shared-vault', () => {
     );
     sharedVaultTokenAccountAuthorityPDA = _sharedVaultTokenAccountAuthorityPDA;
 
+    let _initializerTokenAccount = await mint.getAccountInfo(initializerTokenAccount);
+    assert.ok(_initializerTokenAccount.amount.toNumber() == initializerAmount);
+
+    let _depositerTokenAccount = await mint.getAccountInfo(depositerTokenAccount);
+    assert.ok(_depositerTokenAccount.amount.toNumber() == depositAmount * 2);
+  });
+
+  it("Initialize shared vault", async () => {
     await program.rpc.initialize(
       sharedVaultTokenAccountBump,
       new anchor.BN(initializerAmount),
@@ -136,7 +136,6 @@ describe('anchor-shared-vault', () => {
     );
 
     assert.ok(_vault.owner.equals(sharedVaultTokenAccountAuthorityPDA));
-    assert.ok(_sharedVaultAccount.initializerKey.equals(initializerMainAccount.publicKey));
     assert.ok(_sharedVaultAccount.balance.toNumber() == initializerAmount);
   });
 
@@ -214,7 +213,8 @@ describe('anchor-shared-vault', () => {
       );
     } catch(err) {
       console.log(err.toString());
-      assert.ok(err.toString() == "Error: failed to send transaction: Transaction simulation failed: Error processing Instruction 0: custom program error: 0x99")
+      console.log("");
+      assert.ok(err.toString() == "Error: failed to send transaction: Transaction simulation failed: Error processing Instruction 0: custom program error: 0x1")
     }  
   });
 
@@ -243,6 +243,44 @@ describe('anchor-shared-vault', () => {
     );
 
     assert.ok(depositAmount - withdrawAmount - 1  ==_sharedVaultAccount.balance.toNumber());
+  });
+
+  it("Check whitelist/blacklist", async () => {
+    await program.rpc.whitelist(
+      {
+        accounts: {
+          user: depositerMainAccount.publicKey,
+          userState: depositerStateAccount.publicKey,
+          systemProgram: anchor.web3.SystemProgram.programId,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+        },
+        signers: [depositerMainAccount, depositerStateAccount]
+      }
+    );
+    
+    let _depositerUserState = await program.account.userState.fetch(
+      depositerStateAccount.publicKey
+    );
+
+    assert.ok(_depositerUserState.isWhitelisted);
+
+    await program.rpc.blacklist(
+      {
+        accounts: {
+          user: depositerMainAccount.publicKey,
+          userState: depositerStateAccount.publicKey,
+          systemProgram: anchor.web3.SystemProgram.programId,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+        },
+        signers: [depositerMainAccount, depositerStateAccount]
+      }
+    );
+    
+    _depositerUserState = await program.account.userState.fetch(
+      depositerStateAccount.publicKey
+    );
+
+    assert.ok(!_depositerUserState.isWhitelisted);
   });
 
 });
