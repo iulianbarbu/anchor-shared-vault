@@ -1,7 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, SetAuthority, TokenAccount, Transfer};
 use spl_token::instruction::AuthorityType;
-use thiserror::Error;
 
 declare_id!("3eC59jD55nX6HvYj6tE7ycbmj8ctBiGuCjLBvK6oFNz9");
 
@@ -267,17 +266,11 @@ pub struct Blacklist<'info> {
     pub rent: Sysvar<'info, Rent>,
 }
 
-#[derive(Error, Debug, Copy, Clone)]
+#[error]
 pub enum SharedVaultError {
     /// Invalid instruction
-    #[error("Insufficient Fund ")]
+    #[msg("Insufficient Funds")]
     InsufficientFunds,
-    #[error("Can Not Borrow")]
+    #[msg("Can Not Borrow")]
     CanNotBorrow,
-}
-
-impl From<SharedVaultError> for ProgramError {
-    fn from(e: SharedVaultError) -> Self {
-        ProgramError::Custom(e as u32)
-    }
 }

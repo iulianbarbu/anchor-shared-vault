@@ -223,7 +223,7 @@ describe('anchor-shared-vault', () => {
         }
       );
     } catch(err) {
-      assert.ok(err.toString() == "Error: failed to send transaction: Transaction simulation failed: Error processing Instruction 0: custom program error: 0x1");
+      assert.ok(err.toString() == "Can Not Borrow");
       let _depositerUserState = await program.account.userState.fetch(
         depositerStateAccount.publicKey
       );
