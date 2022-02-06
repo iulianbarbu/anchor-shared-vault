@@ -182,7 +182,6 @@ pub struct Deposit<'info> {
     pub user: AccountInfo<'info>,
     #[account(init_if_needed, payer = user)]
     pub user_state: Account<'info, UserState>,
-    pub mint: Account<'info, Mint>,
     #[account(mut)]
     pub shared_vault_token_account: Account<'info, TokenAccount>,
     #[account(
@@ -218,7 +217,6 @@ pub struct Withdraw<'info> {
     pub user: AccountInfo<'info>,
     #[account(init_if_needed, payer = user)]
     pub user_state: Account<'info, UserState>,
-    pub mint: Account<'info, Mint>,
     #[account(mut)]
     pub shared_vault_token_account: Account<'info, TokenAccount>,
     #[account(mut)]
@@ -276,7 +274,6 @@ pub struct Blacklist<'info> {
 
 #[error]
 pub enum SharedVaultError {
-    /// Invalid instruction
     #[msg("Insufficient Funds")]
     InsufficientFunds,
     #[msg("Can Not Borrow")]

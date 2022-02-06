@@ -2,23 +2,49 @@
 
 Solana smart contract that represents a shared vault, acting as a liquidity pool for multiple users.
 
-## Features/Design
+### Features/Design
 
 For a high-level description of the features covered by the smart project, please take a look
-at the following diagram: ![alt text](https://github.com/iulianbarbu/anchor-shared-vault/blob/master/img/high-level-design.png).
+at the following diagram: 
+
+![alt text](https://github.com/iulianbarbu/anchor-shared-vault/blob/master/img/high-level-design.png).
 
 IDL for the communication with the smart contract can be found under `target/idl/anchor-shared-vault.json`.
 The IDL is generated after building the project.
 
-## Implementation details
+### Instructions overview
 
+#### Initialize
 
+![alt text](https://github.com/iulianbarbu/anchor-shared-vault/blob/master/img/initialize-instruction.png)
 
-## Running/testing the project.
+Initializing the shared vault implies the existence of an initializer, an admin account that will
+manage the shared vault. Besides opening up the vault with an initial amount of liquidity, the 
+initializer can act as a regular user that can deposit and withdraw money. Being an admin, it confers
+him the power of whitelisting/blacklisting users in terms of withdrawing more money than they've 
+deposited.
 
-The smart contract was developed by using [Anchor](https://github.com/project-serum/anchor). Follow
-these [docs](https://project-serum.github.io/anchor/getting-started/introduction.html) for to get
-started with Anchor. *To build the project*, simply run `anchor build`.
+#### Deposit/Withdraw
+
+![alt text](https://github.com/iulianbarbu/anchor-shared-vault/blob/master/img/dw-instruction.png)
+
+The shared vault can be used by regular users (anyone except the initializer) to deposit their
+money or to withdraw them. A whitelisted user can withdraw more money than had previously deposited, 
+with the condition that the shared vault has sufficient funds.
+
+#### Whitelist/Blacklist
+
+![alt text](https://github.com/iulianbarbu/anchor-shared-vault/blob/master/img/wb-instruction.png)
+
+The initializer account can whitelist or blacklist regular users and really itself. The requirement
+here is that the account that signs the witelist/blacklist instruction has to be identified by
+the same pubkey as the account that initialized the shared vault.
+
+### Running/testing the project
+
+The anchor-shared-vault smart contract was developed through [Anchor](https://github.com/project-serum/anchor). 
+Follow these [docs](https://project-serum.github.io/anchor/getting-started/introduction.html) for to get started 
+with Anchor. *To build the project*, simply run `anchor build`.
 
 *To test it*, start a solana test validator with `solana-test-validator --reset`, deploy the build
 with `anchor deploy` and then run `anchor test`.
