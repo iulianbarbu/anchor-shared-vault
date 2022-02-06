@@ -15,6 +15,7 @@ pub mod anchor_shared_vault {
         _vault_account_bump: u8,
         initializer_amount: u64
     ) -> ProgramResult {
+        ctx.accounts.shared_vault_account.initializer_key = *ctx.accounts.initializer.key;
         ctx.accounts.shared_vault_account.balance = initializer_amount;
         ctx.accounts.initializer_state.deposited = initializer_amount;
         ctx.accounts.initializer_state.debt = 0;
@@ -111,6 +112,7 @@ pub mod anchor_shared_vault {
 
 #[account]
 pub struct SharedVaultAccount {
+    pub initializer_key: Pubkey,
     pub balance: u64
 }
 
@@ -248,20 +250,26 @@ impl<'info> Withdraw<'info> {
 
 #[derive(Accounts)]
 pub struct Whitelist<'info> {
+    #[account(mut, signer, constraint = initializer.key.clone() == shared_vault_account.initializer_key)]
+    pub initializer: AccountInfo<'info>,
     #[account(mut, signer)]
     pub user: AccountInfo<'info>,
     #[account(init_if_needed, payer = user)]
     pub user_state: Account<'info, UserState>,
+    pub shared_vault_account: Account<'info, SharedVaultAccount>,
     pub system_program: AccountInfo<'info>,
     pub rent: Sysvar<'info, Rent>,
 }
 
 #[derive(Accounts)]
 pub struct Blacklist<'info> {
+    #[account(mut, signer, constraint = initializer.key.clone() == shared_vault_account.initializer_key)]
+    pub initializer: AccountInfo<'info>,
     #[account(mut, signer)]
     pub user: AccountInfo<'info>,
     #[account(init_if_needed, payer = user)]
     pub user_state: Account<'info, UserState>,
+    pub shared_vault_account: Account<'info, SharedVaultAccount>,
     pub system_program: AccountInfo<'info>,
     pub rent: Sysvar<'info, Rent>,
 }

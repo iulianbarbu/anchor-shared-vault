@@ -5,9 +5,7 @@ Solana smart contract that represents a shared vault, acting as a liquidity pool
 ## Features/Design
 
 For a high-level description of the features covered by the smart project, please take a look
-at the following diagram: **TODO**.
-
-
+at the following diagram: ![alt text](https://github.com/iulianbarbu/anchor-shared-vault/blob/master/img/high-level-design.png).
 
 IDL for the communication with the smart contract can be found under `target/idl/anchor-shared-vault.json`.
 The IDL is generated after building the project.

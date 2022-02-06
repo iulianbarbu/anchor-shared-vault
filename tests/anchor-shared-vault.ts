@@ -301,12 +301,14 @@ describe('anchor-shared-vault', () => {
     await program.rpc.whitelist(
       {
         accounts: {
+          initializer: initializerMainAccount.publicKey,
           user: depositerMainAccount.publicKey,
           userState: depositerStateAccount.publicKey,
+          sharedVaultAccount: sharedVaultAccount.publicKey,
           systemProgram: anchor.web3.SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
         },
-        signers: [depositerMainAccount, depositerStateAccount]
+        signers: [initializerMainAccount, depositerMainAccount, depositerStateAccount]
       }
     );
     
@@ -319,12 +321,14 @@ describe('anchor-shared-vault', () => {
     await program.rpc.blacklist(
       {
         accounts: {
+          initializer: initializerMainAccount.publicKey,
           user: depositerMainAccount.publicKey,
           userState: depositerStateAccount.publicKey,
+          sharedVaultAccount: sharedVaultAccount.publicKey,
           systemProgram: anchor.web3.SystemProgram.programId,
           rent: anchor.web3.SYSVAR_RENT_PUBKEY,
         },
-        signers: [depositerMainAccount, depositerStateAccount]
+        signers: [initializerMainAccount, depositerMainAccount, depositerStateAccount]
       }
     );
     
